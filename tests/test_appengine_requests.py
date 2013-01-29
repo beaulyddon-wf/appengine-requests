@@ -1,8 +1,9 @@
 import unittest
 
-from mock import Mock
+from mock import Mock, patch
 
 from appengine_requests import AppEngineRequest
+from appengine_requests import UnableToAuthenticate
 
 
 class InitAppEngineRequestTestCase(unittest.TestCase):
@@ -14,11 +15,15 @@ class InitAppEngineRequestTestCase(unittest.TestCase):
         gae_req = AppEngineRequest()
 
         self.assertIsNone(gae_req.options)
-        self.assertIsNone(gae_req.email)
-        self.assertIsNone(gae_req.password)
+        self.assertEqual(gae_req.email, "")
+        self.assertEqual(gae_req.password, "")
         self.assertIsNone(gae_req.appid)
         self.assertIsNone(gae_req.url)
         self.assertIsNone(gae_req.secure)
+        self.assertEqual(gae_req.source, "")
+        self.assertEqual(gae_req.account_type, 'HOSTED_OR_GOOGLE')
+        self.assertEqual(gae_req.auth_server_url, 'www.google.com')
+        self.assertEqual(gae_req.auth_server_login, '/accounts/ClientLogin')
 
 
 class BuildUrlAppEngineRequestTestCase(unittest.TestCase):
@@ -138,3 +143,135 @@ class BuildUrlAppEngineRequestTestCase(unittest.TestCase):
         url = gae_req.build_url()
 
         self.assertEqual(url, "http://test.appspot.com/foo")
+
+
+class GetAuthTokenAppEngineRequestTestCase(unittest.TestCase):
+
+    @patch("appengine_requests.requests.post")
+    def test_empty_request_returns_empty(self, request_post):
+        """Ensure that if the request returns empty that the proper exception
+        is raised.
+        """
+        gae_req = AppEngineRequest(url="/foo", appid="test")
+
+        request_post.return_value = Mock(text="")
+
+        self.assertRaises(UnableToAuthenticate, gae_req.get_auth_token)
+
+        data = {
+            "Email": "",
+            "Passwd": "",
+            "service": "ah",
+            "source": "",
+            "accountType": "HOSTED_OR_GOOGLE"
+        }
+
+        request_post.assert_called_once_with(
+            "https://www.google.com/accounts/ClientLogin", data=data)
+
+    @patch("appengine_requests.requests.post")
+    def test_response_with_only_filter_chars_raises(self, request_post):
+        """Ensure that if the request returns only the filterd values that it
+        raises. Not sure what would trigger this case.
+        """
+        gae_req = AppEngineRequest(url="/foo", appid="test", source="test",
+                                   email="foo@bar.com", password="foobar")
+
+        request_post.return_value = Mock(text="=\n")
+
+        self.assertRaises(UnableToAuthenticate, gae_req.get_auth_token)
+
+        data = {
+            "Email": "foo@bar.com",
+            "Passwd": "foobar",
+            "service": "ah",
+            "source": "test",
+            "accountType": "HOSTED_OR_GOOGLE"
+        }
+
+        request_post.assert_called_once_with(
+            "https://www.google.com/accounts/ClientLogin", data=data)
+
+    @patch("appengine_requests.requests.post")
+    def test_response_doesnot_have_auth_raises(self, request_post):
+        """Ensure that if the request returns without an Auth token supplied
+        that it raises.
+        """
+        gae_req = AppEngineRequest(url="/foo", appid="test", source="test",
+                                   email="foo@bar.com", password="foobar")
+
+        request_post.return_value = Mock(text="asdf=blah\n")
+
+        self.assertRaises(UnableToAuthenticate, gae_req.get_auth_token)
+
+        data = {
+            "Email": "foo@bar.com",
+            "Passwd": "foobar",
+            "service": "ah",
+            "source": "test",
+            "accountType": "HOSTED_OR_GOOGLE"
+        }
+
+        request_post.assert_called_once_with(
+            "https://www.google.com/accounts/ClientLogin", data=data)
+
+    @patch("appengine_requests.requests.post")
+    def test_response_has_auth_token(self, request_post):
+        """Ensure that if the response has an auth token that it is returned
+        correctly.
+        """
+        gae_req = AppEngineRequest(url="/foo", appid="test", source="test",
+                                   email="foo@bar.com", password="foobar")
+
+        request_post.return_value = Mock(text="Auth=my_token\n")
+
+        token = gae_req.get_auth_token()
+
+        self.assertEqual(token, "my_token")
+        self.assertIsNone(gae_req.sid)
+
+        data = {
+            "Email": "foo@bar.com",
+            "Passwd": "foobar",
+            "service": "ah",
+            "source": "test",
+            "accountType": "HOSTED_OR_GOOGLE"
+        }
+
+        request_post.assert_called_once_with(
+            "https://www.google.com/accounts/ClientLogin", data=data)
+
+    @patch("appengine_requests.requests.post")
+    def test_response_has_auth_token_and_sid(self, request_post):
+        """Ensure that if the response has an auth token and a sessionid that
+        the token is returned correctly and the sid set on the class.
+        """
+        gae_req = AppEngineRequest(url="/foo", appid="test", source="test",
+                                   email="foo@bar.com", password="foobar")
+
+        request_post.return_value = Mock(text="Auth=my_token\nSID=my_sid")
+
+        token = gae_req.get_auth_token()
+
+        self.assertEqual(token, "my_token")
+        self.assertEqual(gae_req.sid, "my_sid")
+
+        data = {
+            "Email": "foo@bar.com",
+            "Passwd": "foobar",
+            "service": "ah",
+            "source": "test",
+            "accountType": "HOSTED_OR_GOOGLE"
+        }
+
+        request_post.assert_called_once_with(
+            "https://www.google.com/accounts/ClientLogin", data=data)
+
+
+class VerifiyTokenAppEngineRequestTestCase(unittest.TestCase):
+
+    def test_verification_failed(self):
+        """Ensure that if verification fails that an UnableToVerifyToken
+        exception is raised.
+        """
+        pass
