@@ -40,6 +40,7 @@ setup(
     version=appengine_requests.__version__,
     description='',
     author='Beau Lyddon',
+    request=['requests'],
     tests_require=['pytest'],
     cmdclass={'test': PyTest}
 )
