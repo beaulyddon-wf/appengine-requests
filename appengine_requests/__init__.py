@@ -1,8 +1,9 @@
 __version__ = "0.0.1"
 
+import hashlib
 import os
 
-from urlparse import urlsplit, ParseResult
+from urlparse import urlsplit
 
 import requests
 
@@ -13,6 +14,7 @@ AUTH_SID = "SID"
 AUTHED_SID = "ACSID"
 APPCFG_LOGIN_PATH = "APPCFG_LOGIN_PATH"
 PATH = "/"
+DEV_LOGIN = "dev_appserver_login"
 
 
 class UnableToAuthenticate(Exception):
@@ -80,18 +82,21 @@ class AppEngineRequest(object):
 
         return self.full_url
 
-    def run(self, url=None):
+    def run(self, url=None, is_admin=False):
         """Run the url either passed in or from the attributes."""
+        self.url = url
+        url = self.build_url()
 
-        # TODO: need to check if hitting local or appspot.
-        self.auth_token = self.get_auth_token()
+        cookies = {PATH: "/"}
 
-        authenticated_sid = self.verify_token(self.auth_token)
+        # need to check if hitting local or appspot.
+        if self.domain == "localhost":
+            cookies[DEV_LOGIN] = self.dev_create_cookie_data(is_admin)
+        else:
+            self.auth_token = self.get_auth_token()
+            authenticated_sid = self.verify_token(self.auth_token)
 
-        cookies = {
-            AUTHED_SID: authenticated_sid,
-            PATH: "/"
-        }
+            cookies[AUTHED_SID] = authenticated_sid
 
         req = requests.get(url, cookies=cookies)
 
@@ -151,3 +156,19 @@ class AppEngineRequest(object):
                            allow_redirects=False)
 
         return req.cookies.get(AUTHED_SID)
+
+    def dev_create_cookie_data(self, admin):
+        """Create the cookie data for hitting the development server.
+
+        :return: :class: `str`
+        """
+        admin_string = 'True' if admin else 'False'
+        user_id = ''
+
+        if not self.email:
+            return None
+
+        user_id_digest = hashlib.md5(self.email.lower()).digest()
+        user_id = '1' + ''.join(['%02d' % ord(x) for x in user_id_digest])[:20]
+
+        return "%s:%s:%s" % (self.email, admin_string, user_id)
