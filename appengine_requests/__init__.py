@@ -12,6 +12,7 @@ SECURE_SCHEMA = "https://"
 AUTH_TOKEN_FLAG = "Auth"
 AUTH_SID = "SID"
 AUTHED_SID = "ACSID"
+S_AUTHED_SID = "SACSID"
 APPCFG_LOGIN_PATH = "APPCFG_LOGIN_PATH"
 PATH = "/"
 DEV_LOGIN = "dev_appserver_login"
@@ -43,7 +44,7 @@ class AppEngineRequest(object):
         self.auth_service = kwargs.get("auth_service", "ah")
         self.continue_location = kwargs.get(
             "continue_location", "http://localhost")
-        self.login_path = kwargs.get("login_path", "_ah")
+        self.login_path = kwargs.get("login_path", "/_ah")
         self.login_domain = kwargs.get("login_domain", "localhost")
         self.sid = None
         self.scheme = None
@@ -75,8 +76,8 @@ class AppEngineRequest(object):
                 if not self.appid.endswith(".appspot.com"):
                     self.domain += ".appspot.com"
 
-            path = "%s/%s" % (self.domain, path)
-            self.netloc = path.replace("//", "/")
+        path = "%s/%s" % (self.domain, path)
+        self.netloc = path.replace("//", "/")
 
         self.full_url = "%s://%s" % (self.scheme, self.netloc)
 
@@ -87,7 +88,7 @@ class AppEngineRequest(object):
         self.url = url
         url = self.build_url()
 
-        cookies = {PATH: "/"}
+        cookies = {"PATH": PATH}
 
         # need to check if hitting local or appspot.
         if self.domain == "localhost":
@@ -97,8 +98,19 @@ class AppEngineRequest(object):
             authenticated_sid = self.verify_token(self.auth_token)
 
             cookies[AUTHED_SID] = authenticated_sid
+            cookies[S_AUTHED_SID] = authenticated_sid
 
+        return cookies
+
+    def get(self, url=None, is_admin=False):
+        cookies = self.run(url, is_admin)
         req = requests.get(url, cookies=cookies)
+
+        return req.text
+
+    def post(self, url=None, is_admin=False, payload=None):
+        cookies = self.run(url, is_admin)
+        req = requests.post(url, cookies=cookies, data=payload)
 
         return req.text
 
@@ -155,7 +167,9 @@ class AppEngineRequest(object):
         req = requests.get(url, params=args, cookies=cookies,
                            allow_redirects=False)
 
-        return req.cookies.get(AUTHED_SID)
+        token = req.cookies.get(AUTHED_SID)
+        if not token:
+            return req.cookies.get(S_AUTHED_SID)
 
     def dev_create_cookie_data(self, admin):
         """Create the cookie data for hitting the development server.

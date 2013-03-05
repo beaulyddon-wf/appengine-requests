@@ -96,7 +96,7 @@ class BuildUrlAppEngineRequestTestCase(unittest.TestCase):
 
         url = gae_req.build_url()
 
-        self.assertEqual(url, "http://test.appspot.com")
+        self.assertEqual(url, "http://test.appspot.com/")
 
     def test_full_url_with_no_appid_but_has_ssl(self):
         """Ensure that a full url with no appid but has ssl still  matches
@@ -106,7 +106,7 @@ class BuildUrlAppEngineRequestTestCase(unittest.TestCase):
 
         url = gae_req.build_url()
 
-        self.assertEqual(url, "http://test.appspot.com")
+        self.assertEqual(url, "http://test.appspot.com/")
 
     def test_full_url_with_appid_but_has_ssl(self):
         """Ensure that a full url with appid or ssl still  matches the url
@@ -116,7 +116,7 @@ class BuildUrlAppEngineRequestTestCase(unittest.TestCase):
 
         url = gae_req.build_url()
 
-        self.assertEqual(url, "http://test.appspot.com")
+        self.assertEqual(url, "http://test.appspot.com/")
 
     def test_url_missing_scheme_with_no_appid_sets_local(self):
         """Ensure that a url with no scheme and no appid appends the url to
